@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: ticketshield-db
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - ticketshield-net
+
+  # Backend API
+  server:
+    build: ./server
+    container_name: ticketshield-server
+    ports:
+      - "5000:5000"
+    environment:
+      MONGO_URI: mongodb://admin:password@mongodb:27017/ticketshield?authSource=admin
+      PORT: 5000
+      JWT_SECRET: ticketshield_jwt_secret_change_in_production
+      NODE_ENV: production
+    depends_on:
+      - mongodb
+    networks:
+      - ticketshield-net
+
+  # Frontend Client
+  client:
+    build: ./client
+    container_name: ticketshield-client
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    networks:
+      - ticketshield-net
+
+volumes:
+  mongo-data:
+
+networks:
+  ticketshield-net:
+    driver: bridge

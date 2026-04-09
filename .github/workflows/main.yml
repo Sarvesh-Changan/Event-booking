@@ -1,0 +1,222 @@
+name: CI_DevSecOps
+
+on:
+  push:
+    tags: [ "*" ]
+    branches:
+      - 'main'
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  sca_scan:
+   name: Run Snyk Scan
+   runs-on: ubuntu-latest
+
+   steps:
+   - name: Checkout code
+     uses: actions/checkout@v2
+
+   - name: Set up Node
+     uses: actions/setup-node@v4
+     with:
+        node-version: 18
+
+   - name: Run npm install
+     run: |
+        cd ./app
+        npm install
+        
+   - name: Run the SCA Snyk scan on the source code
+     uses: snyk/actions/node@master
+     continue-on-error: true
+     env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }} 
+     with:
+        args: --file=app/package.json --severity-threshold=high --sarif-file-output=snyk-report.sarif
+        
+   - name: Upload Artifact
+     uses: actions/upload-artifact@v3
+     if: always()
+     with:
+      name: snyk-findings
+      path: snyk-report.sarif
+
+  image_scan:
+   name: Build Image and Run Image Scan
+   runs-on: ubuntu-latest
+
+   steps:
+   - name: Checkout code
+     uses: actions/checkout@v2
+
+   - name: Set up Docker
+     uses: docker-practice/actions-setup-docker@v1
+     with:
+      docker_version: '20.10.7'
+
+   - name: Build Docker Image
+     run: docker build -f Dockerfile -t davarski/k8s-demo-app:v1.0 .
+
+   - name: Docker Scout Scan
+     uses: docker/scout-action@v1
+     with:
+       dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
+       dockerhub-password: ${{ secrets.DOCKERHUB_TOKEN }}
+       command: quickview,cves
+       only-severities: critical,high
+       sarif-file: scout-report.sarif
+       
+   - name: Upload Artifact
+     uses: actions/upload-artifact@v3
+     if: always()
+     with:
+      name: scout-findings
+      path: scout-report.sarif
+      
+#   - name: Run Trivy vulnerability scanner
+#     uses: aquasecurity/trivy-action@master
+#     with:
+#          image-ref: '${{ secrets.DOCKERHUB_USERNAME }}/k8s-demo-app:v1.0'
+#          format: 'table'
+#          exit-code: '0'
+#          ignore-unfixed: true
+#          vuln-type: 'os,library'
+#          severity: 'CRITICAL,HIGH'
+
+   - name: Run Trivy vulnerability scanner
+     uses: aquasecurity/trivy-action@master
+     with:
+          image-ref: '${{ secrets.DOCKERHUB_USERNAME }}/k8s-demo-app:v1.0'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+#   - name: Upload Trivy scan results to GitHub Security tab
+#     uses: github/codeql-action/upload-sarif@v2
+#     if: always()
+#     with:
+#          sarif_file: 'trivy-results.sarif'
+
+   - name: Upload Artifact
+     uses: actions/upload-artifact@v3
+     if: always()
+     with:
+      name: trivy-findings
+      path: trivy-results.sarif       
+          
+   - name: Login to DockerHub
+     uses: docker/login-action@v2
+     with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+   - name: Build, tag, and push image to DockerHub
+    # if: steps.lint.outputs.changed == 'true' OR if scans are OK 
+     run: |
+        # Build a docker container and push it to DockerHub
+        docker build -t davarski/k8s-demo-app:v1.0 .
+        echo "Pushing image to DockeHub..."
+        docker push davarski/k8s-demo-app:v1.0 
+
+
+#   - name: Login to DockerHub
+#     uses: docker/login-action@v2
+#     with:
+#        username: ${{ secrets.DOCKERHUB_USERNAME }}
+#        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+   
+#   - name: Build, tag, and push image to DockerHub
+  
+#     run: |
+        # Build a docker container and push it to DockerHub
+#        git_hash=$(git rev-parse --short "$GITHUB_SHA")
+#        docker build -t davarski/devsecops-demo:${GITHUB_REF##*/}-$git_hash .
+#        echo "Pushing image to DockeHub..."
+#        docker push davarski/devsecops-demo:${GITHUB_REF##*/}-$git_hash
+
+
+  deploy-app-on-k3d-and-zap-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+#      - name: Create kind cluster
+#        uses: helm/kind-action@v1.0.0
+
+      
+      - name: "Create single k3d Cluster with imported Registry"
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: CICD-test-cluster
+          args: >-
+            --agents 3
+            --no-lb
+            --k3s-arg "--no-deploy=traefik,servicelb,metrics-server@server:*"
+
+      - name: Apply k8s manifests
+        run: |
+          kubectl apply -f ./k8s/mongo-config.yaml
+          kubectl apply -f ./k8s/mongo-secret.yaml
+          kubectl apply -f ./k8s/mongo.yaml
+          kubectl apply -f ./k8s/webapp.yaml
+
+      - name: List pods and services
+        run: |
+          kubectl get pods 
+          kubectl get services 
+          
+      - name: Wait for app
+        # TODO: If the Pods never become Ready, e.g. because of config or image problems, this will hang until the workflow
+        # times out. Should add a timeout condition to the loop.
+        run: |
+          while [[ $(kubectl get pods -n default -l app=webapp -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; do echo "waiting for pod" && sleep 1; done
+          sleep 10
+      - name: Port Forward to Service
+        run: 'kubectl port-forward -n default service/webapp-service 3000:3000 &'
+
+      - name: Test App
+        run: |
+          curl -v localhost:3000
+
+      - name: ZAP Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: 'http://localhost:3000'
+
+#    - name: run the docker image
+#      run: |
+#          docker run -d -p 3000:3000 ${{ secrets.DOCKERHUB_USERNAME }}/k8s-demo-app:v1.0
+#     - name: ZAP Scan
+#        uses: zaproxy/action-baseline@v0.9.0
+#        with:
+#          target: 'http://localhost:3000'
+#          allow_issue_writing: true
+#          token: ${{ secrets.GITHUB_TOKEN }}
+          
+#  defectdojo_import_scan:
+#   name: Import Scout Scan to DefectDojo
+#   runs-on: ubuntu-latest
+
+#   steps:
+#   - name: Checkout code
+#     uses: actions/checkout@v2
+
+#   - name: Set up Python
+#     uses: actions/setup-python@v2
+#     with:
+#       python-version: 3.8
+
+#   - name: Install Requests
+#     run: pip install requests
+ 
+#   - name: Import Scout Scan 
+#     run: |
+#        export DEFECT_DOJO_API_TOKEN=548afd6fab3bea9794a41b31da0e9404f733e222
+#        python3 defectdojo_import_scan.py --host http://demo.defectdojo.org --product NODE-WEB-APP ---engagement scout --report scout-report.sarif
+
