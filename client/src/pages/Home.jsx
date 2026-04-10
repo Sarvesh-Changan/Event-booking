@@ -51,7 +51,8 @@ const Home = () => {
       <HeroSection />
 
       {/* Trending Events */}
-      <Layout className="py-16 sm:py-20">
+      <section className="py-16 sm:py-20">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10 sm:mb-12">
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -91,10 +92,12 @@ const Home = () => {
             View All Events <HiOutlineArrowRight />
           </Link>
         </div>
-      </Layout>
+        </div>
+      </section>
 
       {/* Explore by Vibe */}
-      <Layout className="py-16 sm:py-20">
+      <section className="py-16 sm:py-20">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
         <div className="mb-10 sm:mb-12">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -127,10 +130,12 @@ const Home = () => {
             </Link>
           ))}
         </div>
-      </Layout>
+        </div>
+      </section>
 
       {/* CTA Banner */}
-      <Layout className="py-16 sm:py-20">
+      <section className="py-16 sm:py-20">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary-dark to-[#9F1239]">
           <div className="absolute top-0 right-0 w-80 h-80 bg-white/[0.06] rounded-full blur-3xl translate-x-1/4 -translate-y-1/4" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/[0.04] rounded-full blur-3xl -translate-x-1/4 translate-y-1/4" />
@@ -158,10 +163,12 @@ const Home = () => {
             </div>
           </div>
         </div>
-      </Layout>
+        </div>
+      </section>
 
       {/* Stats */}
-      <Layout className="pb-20 sm:pb-24">
+      <section className="pb-20 sm:pb-24">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {[
             { value: '50K+', label: 'Tickets Sold', icon: HiOutlineTicket },
@@ -178,7 +185,8 @@ const Home = () => {
             </div>
           ))}
         </div>
-      </Layout>
+        </div>
+      </section>
     </div>
   );
 };
