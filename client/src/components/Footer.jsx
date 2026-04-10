@@ -7,7 +7,7 @@ const Footer = () => {
     <footer className="relative mt-8">
       <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
 
-      <Layout className="py-12 sm:py-16">
+      <div className="py-12 sm:py-16 max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
           {/* Brand */}
           <div>
@@ -90,7 +90,7 @@ const Footer = () => {
             ))}
           </div>
         </div>
-      </Layout>
+      </div>
     </footer>
   );
 };
